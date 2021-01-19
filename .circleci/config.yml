@@ -13,8 +13,8 @@ commands:
             aws cloudformation destroy \
               --template-file .circleci/files/backend.yml \
               --tags project=your-tag \
-               --stack-name "your back-end stack name with workflow id" \
-               --parameter-overrides ID="your workflow id"  
+               --stack-name "backend-${CIRCLE_WORKFLOW_ID}" \
+               --parameter-overrides ID=${CIRCLE_WORKFLOW_ID}
              
 
   revert-migrations:
@@ -24,16 +24,17 @@ commands:
     steps:
       - run:
           name: Revert migrations
-          # Add when this will run
+          when: on_fail
           command: |
             # Curl command here to see if there was a successful migration associated with the workflow id, store result in SUCCESS variable
             SUCCESS = 1
             if(( $SUCCESS==1 )); 
             then
-            #  cd ~/project/backend
-            #  npm install
-            npm run migrations:revert
-              exit 1
+              cd ~/project/backend
+              npm install
+              npm run migrations:revert
+            else
+              return 0
             fi
             
 jobs:
@@ -71,47 +72,51 @@ jobs:
     docker:
       - image: circleci/node:13.8.0
     steps:
-      # Checkout code from git
-      # Restore from cache
-      # Your job code here
+      - checkout
+      - restore_cache:
+          keys: [frontend-build]
+      - run: npm run test
                 
   test-backend:
     docker:
       - image: circleci/node:13.8.0
     steps:
-      # Checkout code from git
-      # Restore from cache
-      # Your job code here
+      - checkout
+      - restore_cache:
+          keys: [backend-build]
+      - run: npm run test
             
   scan-frontend:
     docker:
-      # Docker image here
+      - image: circleci/node:13.8.0
     steps:
-      # Checkout code from git
-      # Restore from cache
-      # Your job code here
+      - checkout
+      - restore_cache:
+          keys: [frontend-build]
+      - run: npm audit --audit-level=critical
 
   scan-backend:
     docker:
-      # Docker image here
+      - image: circleci/node:13.8.0
     steps:
-      # Checkout code from git
-      # Restore from cache
-      # Your job code here
+      - checkout
+      - restore_cache:
+          keys: [backend-build]
+      - run: npm audit --audit-level=critical
 
   deploy-infrastructure:
     docker:
       - image: amazon/aws-cli
     steps:
-      # Checkout code from git
+      - checkout
       - run:
           name: Ensure back-end infrastructure exists
           command: |
             aws cloudformation deploy \
               --template-file .circleci/files/backend.yml \
               --tags project=your-tag \
-              --stack-name "your back-end stack name with workflow id" \
-              --parameter-overrides ID="your workflow id"  
+              --stack-name "backend-${CIRCLE_WORKFLOW_ID}"	 \
+              --parameter-overrides ID=${CIRCLE_WORKFLOW_ID}  
               
       - run:
           name: Ensure front-end infrastructure exist
@@ -119,8 +124,8 @@ jobs:
             aws cloudformation deploy \
               --template-file .circleci/files/frontend.yml \
               --tags project=your-tag \
-              --stack-name "your front-end stack name with workflow id" \
-              --parameter-overrides ID="your workflow id"  
+              --stack-name "frontend-${CIRCLE_WORKFLOW_ID}" \
+              --parameter-overrides ID=${CIRCLE_WORKFLOW_ID}  
               
       - run:
           name: Add back-end ip to ansible inventory
@@ -135,28 +140,28 @@ jobs:
 
   configure-infrastructure:
     docker:
-      # Docker image here that supports Ansible
+      - image: python:3.7-alpine3.11
     steps:
-      # Checkout code from git
-      # Add ssh keys with fingerprint
+      - checkout
+      - add_ssh_keys:
+          fingerprints: [a0:75:bc:f3:ac:26:66:d8:50:10:d7:39:f4:75:d6:bb]
       # attach workspace
       - run:
           name: Install dependencies
           command: |
-            # Your code here
-            exit 1
+            apk add --update ansible
       - run:
           name: Configure server
           command: |
-            # Your code here
-            exit 1
+              ansible-playbook -i inventory.txt playbook.yml
+
       # Here's where you will add some code to rollback on failure      
 
   run-migrations:
     docker:
       - image: circleci/node:13.8.0
     steps:
-      # Checkout code from git
+      - checkout
       - run:
           name: Run migrations
           command: |
@@ -173,15 +178,19 @@ jobs:
     docker:
       - image: amazon/aws-cli
     steps:
-      # Checkout code from git
+      - checkout
       - run:
           name: Install dependencies
           command: |
-            # your code here
+            apk add --update ansible
       - run:
           name: Get backend url
           command: |
-            # your code here
+           aws ec2 describe-instances \
+            --query 'Reservations[*].Instances[*].PublicIpAddress' \
+            --output text =BACKEND_IP \
+            echo ${BACKEND_IP} >> inventory.txt
+
             export API_URL="http://${BACKEND_IP}:3030"
             echo "${API_URL}"
       - run:
@@ -192,15 +201,15 @@ jobs:
                     
   deploy-backend:
     docker:
-      # Docker image here that supports Ansible
+      - image: python:3.7-alpine3.11
     steps:
-      # Checkout code from git
+      - checkout
       # Add ssh keys with fingerprint
       # attach workspace
       - run:
           name: Install dependencies
           command: |
-            # your code here
+           apk add --update ansible
       - run:
           name: Deploy backend
           command: |
@@ -209,13 +218,13 @@ jobs:
 
   smoke-test:
     docker:
-      # Lightweight Docker image 
+      - image: python:3.7-alpine3.11
     steps:
-      # Checkout code from git
+      - checkout
       - run:
           name: Install dependencies
           command: |
-            # your code here
+            apk add --update ansible
       - run:
           name: Get backend url
           command: |
@@ -234,7 +243,7 @@ jobs:
     docker:
       - image: amazon/aws-cli
     steps:
-      # Checkout code from git
+      - checkout
       - run:
           name: Install dependencies
           command: |
@@ -249,7 +258,7 @@ cleanup:
     docker:
       # Docker image here
     steps:
-      # Checkout code from git
+      - checkout
       - run:
           name: Get old stack workflow id
           command: |
