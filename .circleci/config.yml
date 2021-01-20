@@ -130,13 +130,12 @@ jobs:
       - run:
           name: Add back-end ip to ansible inventory
           command: |
-            # Your code here
-            exit 1
+            aws 
       - persist_to_workspace:
           root: ~/
           paths:
             - project/.circleci/ansible/inventory.txt
-      # Here's where you will add some code to rollback on failure      
+       
 
   configure-infrastructure:
     docker:
@@ -144,8 +143,9 @@ jobs:
     steps:
       - checkout
       - add_ssh_keys:
-          fingerprints: [a0:75:bc:f3:ac:26:66:d8:50:10:d7:39:f4:75:d6:bb]
-      # attach workspace
+          fingerprints: [af:f5:c7:41:ae:f6:5f:cf:38:57:07:38:77:d1:a8:75]
+      - attach_workspace:
+          at: /tmp/workspace
       - run:
           name: Install dependencies
           command: |
