@@ -204,8 +204,10 @@ jobs:
       - image: python:3.7-alpine3.11
     steps:
       - checkout
-      # Add ssh keys with fingerprint
-      # attach workspace
+      - add_ssh_keys:
+          fingerprints: [af:f5:c7:41:ae:f6:5f:cf:38:57:07:38:77:d1:a8:75]
+      - attach_workspace:
+          at: /tmp/workspace
       - run:
           name: Install dependencies
           command: |
@@ -256,28 +258,32 @@ jobs:
 
 cleanup:
     docker:
-      # Docker image here
+      - image: amazon/aws-cli
     steps:
       - checkout
       - run:
           name: Get old stack workflow id
           command: |
-            # your code here
-            export OldWorkflowID="the id here"
-            export STACKS=[] #put the list of stacks here
+            export OldWorkflowID=$(aws cloudformation \
+              list-exports --query "Exports[?Name==\`WorkflowID\`].Value" \
+              --no-paginate --output text)
       - run:
           name: Remove old stacks and files
           command: |
             if [[ "${STACKS[@]}" =~ "${OldWorkflowID}" ]]
             then
-              # your code here
+              aws cloudformation destroy \
+              --template-file .circleci/files/backend.yml \
+              --tags project=your-tag \
+              --stack-name "backend-${OldWorkflowID}"	 \
+              --parameter-overrides ID=${OldWorkflowID}  
             fi
             
 
 workflows:
   default:
     jobs:
-      - build-frontend
+      - build-frontend 
       - build-backend
       - test-frontend:
           requires: [build-frontend]
